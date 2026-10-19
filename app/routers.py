@@ -1,8 +1,10 @@
-from fastapi import APIRouter,HTTPException
-from app.schemas import TaskCreate, TaskResponse,TaskUpdate
-from app import services
-from app.services import get_all_tasks,create_task,update_task
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.schemas import TaskCreate, TaskUpdate, TaskResponse
+from app import services
 
 router = APIRouter(
     prefix="/api/v1/tasks",
@@ -10,37 +12,52 @@ router = APIRouter(
 )
 
 
+@router.post(
+    "/",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_task(data: TaskCreate, db: Session = Depends(get_db)):
+    return services.create_task(db, data)
+
+
 @router.get("/", response_model=list[TaskResponse])
-def get_tasks():
-    return services.get_all_tasks()
+def get_tasks(db: Session = Depends(get_db)):
+    return services.get_all_tasks(db)
 
 
-@router.post("/", response_model=TaskResponse, status_code=201)
-def add_task(task: TaskCreate):
-    return services.create_task(task)
-
-@router.patch("/{task_id}", response_model=TaskResponse)
-def update_task(task_id: int, data: TaskUpdate):
-    task = services.update_task(task_id, data)
+@router.get("/{task_id}", response_model=TaskResponse)
+def get_task(task_id: int, db: Session = Depends(get_db)):
+    task = services.get_task(db, task_id)
 
     if task is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Task not found"
-        )
+        raise HTTPException(status_code=404, detail="Task not found")
 
     return task
 
 
+@router.patch("/{task_id}", response_model=TaskResponse)
+def update_task(
+    task_id: int,
+    data: TaskUpdate,
+    db: Session = Depends(get_db),
+):
+    task = services.update_task(db, task_id, data)
 
-@router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int):
-    deleted = services.delete_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return task
+
+
+@router.delete(
+    "/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_task(task_id: int, db: Session = Depends(get_db)):
+    deleted = services.delete_task(db, task_id)
 
     if not deleted:
-        raise HTTPException(
-            status_code=404,
-            detail="Task not found"
-        )
+        raise HTTPException(status_code=404, detail="Task not found")
 
     return None

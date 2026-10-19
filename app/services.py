@@ -1,53 +1,55 @@
 
+from sqlalchemy.orm import Session
+from app.model import Task
 from app.schemas import TaskCreate, TaskUpdate
 
-tasks: list[dict] = []
-next_id = 1
 
+def create_task(db: Session, data: TaskCreate) -> Task:
+    task = Task(**data.model_dump())
 
-def create_task(data: TaskCreate) -> dict:
-    global next_id
-
-    task = {
-        "id": next_id,
-        **data.model_dump(),
-        "completed": False,
-    }
-
-    tasks.append(task)
-    next_id += 1
+    db.add(task)
+    db.commit()
+    db.refresh(task)
 
     return task
 
 
-def get_all_tasks() -> list[dict]:
-    return tasks
+def get_all_tasks(db: Session) -> list[Task]:
+    return db.query(Task).order_by(Task.id).all()
 
 
-def get_task(task_id: int) -> dict | None:
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-    return None
+def get_task(db: Session, task_id: int) -> Task | None:
+    return db.query(Task).filter(Task.id == task_id).first()
 
 
-def update_task(task_id: int, data: TaskUpdate) -> dict | None:
-    task = get_task(task_id)
+def update_task(
+    db: Session,
+    task_id: int,
+    data: TaskUpdate,
+) -> Task | None:
+    task = get_task(db, task_id)
 
     if task is None:
         return None
 
     changes = data.model_dump(exclude_unset=True)
-    task.update(changes)
+
+    for field, value in changes.items():
+        setattr(task, field, value)
+
+    db.commit()
+    db.refresh(task)
 
     return task
 
 
-def delete_task(task_id: int) -> bool:
-    task = get_task(task_id)
+def delete_task(db: Session, task_id: int) -> bool:
+    task = get_task(db, task_id)
 
     if task is None:
         return False
 
-    tasks.remove(task)
+    db.delete(task)
+    db.commit()
+
     return True
